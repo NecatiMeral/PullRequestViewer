@@ -9,7 +9,15 @@
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
 import path from 'path';
-import { app, BrowserWindow, shell, ipcMain, Tray, Menu } from 'electron';
+import electron, {
+  app,
+  BrowserWindow,
+  shell,
+  ipcMain,
+  Tray,
+  Menu,
+  nativeImage,
+} from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
@@ -24,6 +32,7 @@ class AppUpdater {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let trayIcon: Tray | null = null;
 
 ipcMain.on('ipc-example', async (event, arg) => {
   const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
@@ -73,7 +82,7 @@ const createWindow = async () => {
     show: false,
     width: 1024,
     height: 728,
-    icon: getAssetPath('icon.png'),
+    icon: getAssetPath('azure-devops.png'),
     webPreferences: {
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
@@ -83,19 +92,20 @@ const createWindow = async () => {
 
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
-  mainWindow.on('ready-to-show', () => {
-    if (!mainWindow) {
-      throw new Error('"mainWindow" is not defined');
-    }
-    if (process.env.START_MINIMIZED) {
-      mainWindow.minimize();
-    } else {
-      mainWindow.show();
-    }
-  });
+  // mainWindow.on('ready-to-show', () => {
+  //   if (!mainWindow) {
+  //     throw new Error('"mainWindow" is not defined');
+  //   }
+  //   if (process.env.START_MINIMIZED) {
+  //     mainWindow.minimize();
+  //   } else {
+  //     mainWindow.show();
+  //   }
+  // });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  mainWindow.on('close', (e) => {
+    e.preventDefault();
+    mainWindow?.hide();
   });
 
   const menuBuilder = new MenuBuilder(mainWindow);
@@ -112,6 +122,26 @@ const createWindow = async () => {
   new AppUpdater();
 };
 
+const showWindow = async () => {
+  if (!mainWindow) {
+    throw new Error('"mainWindow" is not defined');
+  }
+  const display = electron.screen.getPrimaryDisplay();
+  const size = mainWindow.getSize();
+  const width = size[0];
+  const height = size[1];
+
+  mainWindow.setPosition(
+    display.workAreaSize.width - width,
+    display.workAreaSize.height - height,
+  );
+  mainWindow.show();
+};
+
+const exitApp = async () => {
+  app.exit();
+};
+
 const createTrayIcon = async () => {
   const RESOURCES_PATH = app.isPackaged
     ? path.join(process.resourcesPath, 'assets')
@@ -121,13 +151,26 @@ const createTrayIcon = async () => {
     return path.join(RESOURCES_PATH, ...paths);
   };
 
-  const trayIcon = new Tray(getAssetPath('icon.png'));
+  trayIcon = new Tray(getAssetPath('pull-colored.png'));
+  trayIcon.addListener('click', () => showWindow());
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show window', type: 'normal', click: () => createWindow() },
-    { label: 'Item1', type: 'radio' },
-    { label: 'Item2', type: 'radio' },
-    { label: 'Item3', type: 'radio', checked: true },
-    { label: 'Item4', type: 'radio' },
+    {
+      label: 'Show window',
+      type: 'normal',
+      icon: nativeImage
+        .createFromPath(getAssetPath('table-layout.png'))
+        .resize({ width: 16, height: 16 }),
+      click: () => showWindow(),
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit PullRequestViewer',
+      type: 'normal',
+      icon: nativeImage
+        .createFromPath(getAssetPath('shut-down.png'))
+        .resize({ width: 16, height: 16 }),
+      click: () => exitApp(),
+    },
   ]);
   trayIcon.setToolTip('This is my application.');
   trayIcon.setContextMenu(contextMenu);
@@ -149,11 +192,14 @@ app
   .whenReady()
   .then(() => {
     createTrayIcon();
-    // createWindow();
+    createWindow();
     app.on('activate', () => {
       // On macOS it's common to re-create a window in the app when the
       // dock icon is clicked and there are no other windows open.
       if (mainWindow === null) createWindow();
+    });
+    ipcMain.on('pull-requests', (event, arg) => {
+      event.returnValue =
     });
   })
   .catch(console.log);
